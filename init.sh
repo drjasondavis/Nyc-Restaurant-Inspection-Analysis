@@ -5,7 +5,10 @@ echo "Fetching restaurant data to data/ratings.zip"
 wget https://nycopendata.socrata.com/download/4vkw-7nck/ZIP -O data/ratings.zip
 
 echo "Unzipping ratings"
-unzip data/ratings.zip
+pushd data
+unzip ratings.zip
+
+popd
 
 echo "Deleting ratings"
 rm -f data/ratings.zip

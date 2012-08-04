@@ -8,17 +8,20 @@ import dateutil.parser
 import urllib
 import urllib2
 import pickle
+import time
 import numpy
 import matplotlib.mlab as mlab
 
 from nyc_inspection_loader import NycInspectionLoader
+import bizname_comparer
 from helper import *
 
 REGION = 'Manhattan'
 QUERY = 'Restaurants'
 NUM_TOP_PLACES = 1000
+CRAWL_TIMEOUT_SECONDS = 0
 PICKLE_DIR = 'pickle'
-USER_AGENT = 'nyc-restaurant-inspection-analyzer'
+USER_AGENT = 'nyc-restaurant-inspector'
 
 reg = re.compile('<span class="value-title" title="(\d)"></span>\s+</div>\s+<em class="dtreviewed smaller">(\d+/\d+/\d+) <span', re.MULTILINE)
 search_reg = re.compile('<a id="bizTitleLink\d+" href="([^"?#]+)[^"]*">\d+\.')
@@ -31,6 +34,7 @@ def load_data(name):
     return pickle.load(open(pkl_filename(name), 'rb'))
 
 def get_search_results(desc, loc, start = 0):
+    time.sleep(CRAWL_TIMEOUT_SECONDS)
     url = 'http://www.yelp.com/search?find_desc=%s&find_loc=%s&start=%s' % (urllib.quote(desc), loc, start)
     print 'url = %s' % url
     response = urllib2.urlopen(urllib2.Request(url, None, {'User-Agent': USER_AGENT}))
@@ -85,7 +89,7 @@ def print_top_places(places):
     for p in places:
         print p
 
-def ratings_around_date(date, place_name, window_in_days = 30):
+def ratings_around_date(date, place_name, window_in_days = 90):
     yelp_ratings = load_data('ratings/%s' % place_name)
     ratings_before = []
     ratings_after = []
@@ -98,8 +102,7 @@ def ratings_around_date(date, place_name, window_in_days = 30):
                 ratings_after.append(int(r[0]))
             else:
                 ratings_before.append(int(r[0]))
-    return {'before': {'count': len(ratings_before), 'avg': numpy.average(ratings_before)},
-            'after': {'count': len(ratings_after), 'avg': numpy.average(ratings_after)}} 
+    return [ratings_before, ratings_after]
     
 
 def get_manhattan_nyc_inspection_ratings():
@@ -135,19 +138,93 @@ def find_closest_yelp_business(query_biz):
     return None
 
 
-def correlate_restaurants():
-    restaurants = keys(get_manhattan_nyc_inspection_ratings())
-    correlated_restaurants = []
-    for r in restaurants:
+def correlate_restaurants(correlated_restaurants = []):
+    correlated_ids = {}
+    for x in correlated_restaurants:
+        correlated_ids[x[1]] = True
+    print "Num existing correlations: %d" % len(correlated_ids)
+    restaurants = get_manhattan_nyc_inspection_ratings()
+    for biz_id, ratings in restaurants.iteritems():
+        r = ratings[0]
+        if biz_id in correlated_ids:
+            print "Yelp biz already correlated: %s" % r['dba']
+            continue
+        b = ""
         try:
             b = find_closest_yelp_business(r)
-            correlated_restaurants.append([b, r])
+        except urllib2.URLError, e:
+            print "Url error: %s" % e
+            if e.code == 500: 
+                continue
+            return correlated_restaurants
         except:
             print "Unable to find yelp biz for %s" % (r['dba'])
+        correlated_restaurants.append([b, biz_id])
     return correlated_restaurants
-    
-def print_correlated_restaurants(correlated_restaurants, places):
-    pass
+
+def correlate_top_restaurant_inspections():
+    yelp_nyc_id_map = load_data('correlated_restaurants')
+    ratings = get_manhattan_nyc_inspection_ratings()
+    places = load_data('top_places')
+    comparer = bizname_comparer.BiznameComparer()
+    yelp_nyc_businesses = {}
+    for x in yelp_nyc_id_map:
+        yelp_biz_name = x[0]
+        if yelp_biz_name == '':
+            continue
+        biz_id = x[1]
+        if yelp_biz_name not in yelp_nyc_businesses:
+            yelp_nyc_businesses[yelp_biz_name] = []
+        yelp_nyc_businesses[yelp_biz_name].append(biz_id)
+    yelp_biz_ids = {}
+    for yelp_biz_name, biz_ids in yelp_nyc_businesses.iteritems():
+        best_score = -1
+        best_bid = -1
+        for bid in biz_ids:
+            biz_name = ratings[bid][0]['dba']            
+            score = comparer.compare(biz_name, yelp_biz_name)
+            if score > best_score:
+                best_bid, best_score = bid, score
+        yelp_biz_ids[yelp_biz_name] = best_bid
+    ratings_before = {}
+    ratings_after = {}
+    rating_switches = 0
+    uniq_biz_ids = {}
+    for yelp_biz_name, biz_id in yelp_biz_ids.iteritems():
+        if biz_id in uniq_biz_ids:
+            continue
+        uniq_biz_ids[biz_id] = True
+        yelp_biz_name = yelp_biz_name.replace('/biz/', '')
+        if yelp_biz_name not in places:
+            continue
+        biz_ratings = ratings[biz_id]        
+        biz_name = ratings[biz_id][0]['dba']
+        print 'Comparing %s (%s)' % (yelp_biz_name, biz_name)
+        try:
+            for i in range(len(biz_ratings) - 1):
+                r1 = biz_ratings[i]
+                r2 = biz_ratings[i+1]
+                grade1 = r1['currentgrade']
+                grade2 = r2['currentgrade']
+                date = r2['inspdate']
+                [before, after] = ratings_around_date(date, yelp_biz_name.replace('/biz', ''))
+                key = "%s -> %s" % (grade1, grade2)
+                ratings_before.setdefault(key, []).extend(before)
+                ratings_after.setdefault(key, []).extend(after)
+                rating_switches += 1
+        except:
+            e = sys.exc_info()[1]
+            print "Error processing ratings for %s: %s" % (yelp_biz_name, e)
+            
+    print "Num rating switches: %d" % rating_switches
+    for k, v in ratings_before.iteritems():
+        print '%s:' % k
+        print "  Before: %5d %5.2f" % (len(ratings_before[k]), numpy.average(ratings_before[k]))
+        print "   After: %5d %5.2f" % (len(ratings_after[k]), numpy.average(ratings_after[k]))
+        print "--------------------\n"
+    return [ratings_before, ratings_after]
+        
+
 
 mode = sys.argv[1]
 if mode == 'get-top':
@@ -171,14 +248,9 @@ elif mode == 'find-yelp-biz':
     zipcode = sys.argv[3]
     print find_closest_yelp_business({'dba': name, 'zipcode': zipcode})
 elif mode == 'correlate-restaurants':
-    cr = correlate_restaurants()
+    existing_cr = load_data('correlated_restaurants')
+    cr = correlate_restaurants(existing_cr)
     write_data('correlated_restaurants', cr)
-elif mode == 'print-correlated-restaurants':
-    cr = load_data('correlated_restaurants')
-    places = None
-    if sys.argv[2] == 'top':
-        places = load_data('top_places')
-    print_correlated_restaurants(cr, places)
 elif mode == 'ratings-around-date':
     date = dateutil.parser.parse(sys.argv[2])
     place_name = sys.argv[3]
@@ -192,3 +264,5 @@ elif mode == 'get-ratings':
             print 'Business: %s' % biz
             for r in r_seq:
                 print '\t%s: %s' % (r['inspdate'], r['currentgrade'])
+elif mode == 'correlate-top-restaurant-inspections':
+    correlate_top_restaurant_inspections()
