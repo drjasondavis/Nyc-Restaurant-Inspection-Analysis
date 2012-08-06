@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import csv
 
 import json
 
@@ -125,8 +126,6 @@ def get_manhattan_nyc_inspection_ratings():
         if last_date != date:
             #print '%s, %s : %s' % (violation['dba'], last_date, date)
             ratings[biz_id].append(violation)
-
-    print "Num unique restaurants in Manhattan: %d" % (len(ratings))
     return ratings
 
 def find_closest_yelp_business(query_biz):
@@ -177,7 +176,7 @@ def correlate_top_restaurant_inspections():
             yelp_nyc_businesses[yelp_biz_name] = []
         yelp_nyc_businesses[yelp_biz_name].append(biz_id)
     yelp_biz_ids = {}
-    for yelp_biz_name, biz_ids in yelp_nyc_businesses.iteritems():
+    for yelp_biz_name, biz_ids in yelp_nyc_businesses.iteritems():        
         best_score = -1
         best_bid = -1
         for bid in biz_ids:
@@ -190,6 +189,9 @@ def correlate_top_restaurant_inspections():
     ratings_after = {}
     rating_switches = 0
     uniq_biz_ids = {}
+    def date_format(d):
+        return d.strftime("%m/%d/%y")
+    csv.writer(sys.stdout).writerow(['yelp_biz_name', 'rating_type', 'rating_date', 'rating'])
     for yelp_biz_name, biz_id in yelp_biz_ids.iteritems():
         if biz_id in uniq_biz_ids:
             continue
@@ -197,33 +199,22 @@ def correlate_top_restaurant_inspections():
         yelp_biz_name = yelp_biz_name.replace('/biz/', '')
         if yelp_biz_name not in places:
             continue
-        biz_ratings = ratings[biz_id]        
-        biz_name = ratings[biz_id][0]['dba']
-        print 'Comparing %s (%s)' % (yelp_biz_name, biz_name)
-        try:
-            for i in range(len(biz_ratings) - 1):
-                r1 = biz_ratings[i]
-                r2 = biz_ratings[i+1]
-                grade1 = r1['currentgrade']
-                grade2 = r2['currentgrade']
-                date = r2['inspdate']
-                [before, after] = ratings_around_date(date, yelp_biz_name.replace('/biz', ''))
-                key = "%s -> %s" % (grade1, grade2)
-                ratings_before.setdefault(key, []).extend(before)
-                ratings_after.setdefault(key, []).extend(after)
-                rating_switches += 1
+
+        try: 
+            yelp_biz_ratings = load_data('ratings/%s' % yelp_biz_name)
+            for r in yelp_biz_ratings:
+                rating = r[0]
+                rating_date = dateutil.parser.parse(r[1])
+                csv.writer(sys.stdout).writerow([yelp_biz_name, 'yelp', date_format(rating_date), rating])
+                
+            biz_ratings = ratings[biz_id]
+            for r in biz_ratings:
+                csv.writer(sys.stdout).writerow([yelp_biz_name, 'inspection', date_format(r['inspdate']), r['currentgrade']])
         except:
             e = sys.exc_info()[1]
-            print "Error processing ratings for %s: %s" % (yelp_biz_name, e)
+            sys.stderr.write("Error processing ratings for %s: %s\n" % (yelp_biz_name, e))
             
-    print "Num rating switches: %d" % rating_switches
-    for k, v in ratings_before.iteritems():
-        print '%s:' % k
-        print "  Before: %5d %5.2f" % (len(ratings_before[k]), numpy.average(ratings_before[k]))
-        print "   After: %5d %5.2f" % (len(ratings_after[k]), numpy.average(ratings_after[k]))
-        print "--------------------\n"
-    return [ratings_before, ratings_after]
-        
+       
 
 
 mode = sys.argv[1]

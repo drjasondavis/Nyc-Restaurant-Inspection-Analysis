@@ -22,10 +22,10 @@ class NycInspectionLoader:
     def load(self):
         load_data = None
         if os.path.exists('pickle'):
-            print "Loading nyc inspection results from pickled data"
+            print >> sys.stderr, "Loading nyc inspection results from pickled data"
             load_data = lambda x: numpy.load(pkl_filename(x))
         else:
-            print "Loadin nyc inspection results from raw csv data"
+            print >> sys.stderr, "Loadin nyc inspection results from raw csv data"
             os.mkdir('pickle')
             load_data = load_and_pkl_csv
 
