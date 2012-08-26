@@ -1,0 +1,25 @@
+(Rough) steps
+
+1) Run init.sh to get latest data from NYC Open Data
+
+2) Get top 1000 restuarants on yelp. Note that yelp's search engine doesn't seem to deduplicate, so the resulting output of this process returns 1000 restaurants, but not all of them are unique (I found 700 when I ran this in June)
+
+python yelp-crawler.py get-top
+
+3) Get reviews for top restaurants. This is fairly expensive: crawls through each review page for each restaurant in the list above.
+
+python yelp-crawler.py crawl-top-places
+
+4) Correlate restuarants to NYC inspection data. This is also somewhat expensive as it performs a yelp search for every restaurant in NYC Open Data's inspection db that is in Manhattan:
+
+python yelp-crawler.py correlate-restaurants
+
+5) Dump data to a csv.
+
+python yelp-crawler get-ratings > data/reviews_and_inspections.csv 
+
+Note that data/reviews_and_inspections.csv is checked into the repo, so you can skip steps 1-5 if you want
+
+6) Run analysis script
+
+python yelp_inspection_analyzer.py data/reviews_and_inspections.csv
