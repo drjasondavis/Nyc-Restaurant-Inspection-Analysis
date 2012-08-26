@@ -80,8 +80,6 @@ class RestaurantGradeChanges:
     def _aggregate_over_time(self, rating_type, aggregation_function):
         grouped_by_date = {}
         for d in self.data:
-            if d['rating_date'].year != 2010:
-                continue
             rt = d['rating_type']
             date = d['rating_date']
             if rt != rating_type:
@@ -105,7 +103,7 @@ class Plot:
     
     def plot_time(self, time_value_dict):
         time_value_dict = sorted(time_value_dict, key=operator.itemgetter(0))
-        plt.figure() 
+        f = plt.figure() 
         x = []
         y = []
         for [t, r] in time_value_dict:
@@ -113,10 +111,11 @@ class Plot:
             y.append(r)
             
         smoothing_window = 10
-        y = numpy.convolve(numpy.ones(smoothing_window, 'd')/smoothing_window, y, mode='same')
-        plt.plot(x, y)
+        y = numpy.convolve(numpy.ones(smoothing_window, 'd')/smoothing_window, y, mode='valid')
+        plt.plot(x[0:len(y)], y)
         plt.xlabel(self.xlabel)
         plt.ylabel(self.ylabel)
+        f.autofmt_xdate()
         if self.title != None:
             plt.title(self.title)
         plt.savefig(PLOT_DIR + "/" + self.name + ".png")
@@ -129,8 +128,8 @@ grade_changes.extract_restaurant_ratings()
 
 for rating_type in ['yelp', 'inspection']:
     title = '%s ratings over time' % (rating_type)
-    Plot(rating_type + "_ratings_count_over_time", "time", "count", title).plot_time(grade_changes.get_rating_counts_over_time(rating_type))
-    Plot(rating_type + "_ratings_avg_over_time", "time", "average", title).plot_time(grade_changes.get_avg_ratings_over_time(rating_type))
+    Plot(rating_type + "_ratings_count_over_time", "", "ratings per day", title).plot_time(grade_changes.get_rating_counts_over_time(rating_type))
+    Plot(rating_type + "_ratings_avg_over_time", "", "average rating").plot_time(grade_changes.get_avg_ratings_over_time(rating_type))
 
 rating_changes = grade_changes.get_yelp_rating_changes()
 for rating_change, day_values in rating_changes.iteritems():
@@ -155,9 +154,9 @@ for rating_change, day_values in rating_changes.iteritems():
     before_avg = numpy.average(negative_filter(time_averages))
     after_avg = numpy.average(positive_filter(time_averages))
     diff_avg = (after_avg / float(before_avg)) - 1.0
-    print '%15s: Count before:            %4d,   after: %4d, Diff: %.2f' % (rating_change, before_count, after_count, diff_count)
-    print '%15s: Normalized Count before: %2.2f, after: %2.2f, Diff: %.2f' % (rating_change, before_ncount, after_ncount, diff_ncount)
-    print '%15s: Avg before:              %1.2f, after: %1.2f, Diff: %.2f' % (rating_change, before_avg, after_avg, diff_avg)
+    print '%15s: Count before:            %4d,   after: %4d, Diff: %.3f' % (rating_change, before_count, after_count, diff_count)
+    print '%15s: Normalized Count before: %2.2f, after: %2.2f, Diff: %.3f' % (rating_change, before_ncount, after_ncount, diff_ncount)
+    print '%15s: Avg before:              %1.2f, after: %1.2f, Diff: %.3f' % (rating_change, before_avg, after_avg, diff_avg)
     print "\n"
     Plot(rating_change + "_count", "time", "count").plot_time(time_counts.iteritems())
-    Plot(rating_change + "_average", "time", "average").plot_time(time_averages.iteritems())
+    Plot(rating_change + "_average", "time", "average rating").plot_time(time_averages.iteritems())
