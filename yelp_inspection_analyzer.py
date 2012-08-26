@@ -9,6 +9,7 @@ import numpy
 
 
 PLOT_DIR = "plot"
+ANALYSIS_WINDOW = 60
 
 class RestaurantGradeChanges:
     
@@ -41,7 +42,7 @@ class RestaurantGradeChanges:
     def get_rating_counts_over_time(self, rating_type):
         return self._aggregate_over_time(rating_type, lambda x: len(x))
     
-    def get_yelp_rating_changes(self,  window_in_days = 60):
+    def get_yelp_rating_changes(self,  window_in_days = ANALYSIS_WINDOW):
         rating_dates = {}
         for restaurant, ratings in self.ratings['inspection'].iteritems():
             last_inspection_rating = 'None'
