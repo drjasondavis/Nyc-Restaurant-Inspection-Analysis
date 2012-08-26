@@ -10,7 +10,7 @@ python yelp-crawler.py get-top
 
 python yelp-crawler.py crawl-top-places
 
-4) Correlate restuarants to NYC inspection data. This is also somewhat expensive as it performs a yelp search for every restaurant in NYC Open Data's inspection db that is in Manhattan:
+4) Correlate restuarants to NYC inspection data. This is also somewhat expensive as it performs a yelp search for every restaurant in NYC Open Data's inspection db that is in Manhattan. The correlation process isn't perfect (due to data normalization issues with yelp, NYC inspection data, among other things), so expect the list of restaurants from step (1) to whittle down to something smaller.
 
 python yelp-crawler.py correlate-restaurants
 
