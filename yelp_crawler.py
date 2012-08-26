@@ -257,3 +257,6 @@ elif mode == 'get-ratings':
                 print '\t%s: %s' % (r['inspdate'], r['currentgrade'])
 elif mode == 'correlate-top-restaurant-inspections':
     correlate_top_restaurant_inspections()
+else:
+    print "Unknown mode: %s" % mode
+    exit(1)
